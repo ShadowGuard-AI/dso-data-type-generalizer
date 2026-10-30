@@ -1,3 +1,5 @@
+![Banner](banner.png)
+
 # dso-data-type-generalizer
 Replaces specific data types with more general ones (e.g., converts all integers to floats within a dataset).  Useful to introduce a layer of fuzziness without drastically altering the dataset's usability for some downstream purposes. Requires the pandas library. - Focused on Tools for sanitizing and obfuscating sensitive data within text files and structured data formats
 
