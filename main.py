@@ -57,17 +57,19 @@ def generalize_data_type(df, type_map_str):
     for col in df.columns:
         col_type = df[col].dtype
 
-        # Correctly handle 'object' dtype, which can represent strings or mixed data types
-        if col_type == 'object':
-          # Check if all values are strings. If so, treat as 'str'
-          try:
-              df[col] = df[col].astype(str)
-              col_type_name = 'str'
-          except:
-              col_type_name = 'object' #leave it alone.
-
-
-
+        # Classification only reads the column; it must not rewrite it.
+        # The old object branch converted the column to str while deciding
+        # what it was, changing columns the type map never asked to touch.
+        if pd.api.types.is_string_dtype(df[col]):
+            # Current pandas reads text columns with a dedicated string
+            # dtype rather than object. Without this check those columns
+            # fell through to 'object' and a 'str' mapping never fired.
+            col_type_name = 'str'
+        elif col_type == 'object':
+            # A true object column is 'str' only if every present value is
+            # one; anything mixed stays 'object'.
+            present = df[col].dropna()
+            col_type_name = 'str' if len(present) and present.map(lambda v: isinstance(v, str)).all() else 'object'
         elif pd.api.types.is_integer_dtype(df[col]):
             col_type_name = 'int'
         elif pd.api.types.is_float_dtype(df[col]):
