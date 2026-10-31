@@ -11,7 +11,12 @@ Replaces specific data types with more general ones (e.g., converts all integers
 
 ## Parameters
 - `-h`: Show help message and exit
-- `--type_map`: A string defining type conversions in the form of 
+- `--type_map`: A string defining type conversions in the form of
+
+## Behavior
+- An output path that resolves to the input file is refused at exit 1, however it is spelled.
+- A run where no column matched the type map, or the input has no data rows, exits non-zero with no success line and writes no output.
+- The object target converts a column to object dtype for real, and the conversion is logged only when the dtype actually changes.
 
 ## License
 Copyright (c) ShadowGuardAI

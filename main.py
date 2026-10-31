@@ -31,7 +31,8 @@ def generalize_data_type(df, type_map_str):
         df (pd.DataFrame): The input DataFrame.
         type_map_str (str): A string defining type conversions (e.g., 'int:float,bool:str').
     Returns:
-        pd.DataFrame: The DataFrame with generalized data types.
+        tuple: The DataFrame with generalized data types, and the number
+        of columns whose classified type matched the type map.
     Raises:
         ValueError: If an invalid type is specified in the type map or if a conversion fails.
     """
@@ -53,6 +54,8 @@ def generalize_data_type(df, type_map_str):
     except ValueError as e:
         logging.error(f"Error parsing type map: {e}")
         raise
+
+    matched_columns = 0
 
     for col in df.columns:
         col_type = df[col].dtype
@@ -80,9 +83,11 @@ def generalize_data_type(df, type_map_str):
             col_type_name = 'object'  # Handles mixed data types or other cases
 
         if col_type_name in type_map:
+            matched_columns += 1
             new_type = type_map[col_type_name]
 
             try:
+                converted = True
                 if new_type == 'float':
                     df[col] = df[col].astype(float)
                 elif new_type == 'str':
@@ -92,20 +97,26 @@ def generalize_data_type(df, type_map_str):
                 elif new_type == 'bool':
                     df[col] = df[col].astype(bool)
                 elif new_type == 'object':
-                    pass #already object do nothing.
+                    # Convert for real: the old branch was a pass that
+                    # still logged a conversion. Log only when the dtype
+                    # actually changes to object.
+                    before_dtype = df[col].dtype
+                    df[col] = df[col].astype(object)
+                    converted = df[col].dtype != before_dtype
                 else:
                     logging.error(f"Invalid new type specified for conversion: {new_type}")
                     raise ValueError(f"Invalid new type: {new_type}")
 
 
-                logging.info(f"Converted column '{col}' from {col_type_name} to {new_type}")
+                if converted:
+                    logging.info(f"Converted column '{col}' from {col_type_name} to {new_type}")
 
             except ValueError as e:
                 logging.error(f"Failed to convert column '{col}' from {col_type_name} to {new_type}: {e}")
                 raise ValueError(f"Failed to convert column '{col}' from {col_type_name} to {new_type}: {e}")
 
 
-    return df
+    return df, matched_columns
 
 
 def main():
@@ -124,13 +135,32 @@ def main():
         logging.error(f"Input file not found: {input_file}")
         sys.exit(1)
 
+    # Refuse in place output: an output path that resolves to the input
+    # file (same spelling, ./ alias, or symlink) would destroy the
+    # original before anyone can compare the two.
+    if os.path.realpath(output_file) == os.path.realpath(input_file):
+        logging.error("Output file resolves to the input file; refusing to overwrite it in place.")
+        sys.exit(1)
+
     try:
         # Load data securely.  Explicitly specifying encoding is important.  UTF-8 is a generally safe default.
         # Can be expanded upon to auto-detect and handle more encodings securely.
         df = pd.read_csv(input_file, encoding='utf-8')  #  Explicitly define encoding
 
+        # A header with no data rows holds nothing to generalize, so it
+        # fails instead of writing an empty result under a success line.
+        if len(df) == 0:
+            logging.error("Input file has no data rows: nothing to generalize.")
+            sys.exit(1)
+
         # Generalize data types
-        df = generalize_data_type(df, type_map_str)
+        df, matched_columns = generalize_data_type(df, type_map_str)
+
+        # A type map that matched no column changed nothing, so it fails
+        # instead of writing identical output under a success line.
+        if matched_columns == 0:
+            logging.error("No column matched the type map: nothing was generalized.")
+            sys.exit(1)
 
         # Save the modified DataFrame
         df.to_csv(output_file, index=False, encoding='utf-8')
