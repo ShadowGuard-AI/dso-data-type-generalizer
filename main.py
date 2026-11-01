@@ -37,6 +37,10 @@ def generalize_data_type(df, type_map_str):
         ValueError: If an invalid type is specified in the type map or if a conversion fails.
     """
 
+    # The map is keyed by type class, never by column name, so one entry
+    # converts every column in the file that classifies to that type.
+    # Naming the same old type twice is not an error: the later entry
+    # silently replaces the earlier one in this dict.
     type_map = {}
     try:
         for conversion in type_map_str.split(','):
@@ -83,6 +87,17 @@ def generalize_data_type(df, type_map_str):
             col_type_name = 'object'  # Handles mixed data types or other cases
 
         if col_type_name in type_map:
+            # The match is counted before the conversion runs, and main
+            # reads this count as proof something changed. An object
+            # target on a column already stored as object sets converted
+            # to False below, logs nothing, and still counts here, so a
+            # run can pass the count check with a column whose dtype
+            # never moved. The conversions themselves follow astype
+            # rules, which are worth knowing per target: float to int
+            # truncates toward zero (2.9 and -2.9 become 2 and -2, which
+            # I verified), and anything to bool reads every nonzero
+            # number and every non-empty string as True, including the
+            # string False if a column reaches this branch as text.
             matched_columns += 1
             new_type = type_map[col_type_name]
 
